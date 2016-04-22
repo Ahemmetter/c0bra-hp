@@ -1,35 +1,38 @@
-## import the serial library
-import serial
+#!/usr/bin/python
+import serial								# imports serial package			
+import datetime	as dt						# imports datetime package
 
-## Boolean variable that will represent 
-## whether or not the arduino is connected
-connected = False
+connected = False							# connection status
 
-## establish connection to the serial port that your arduino 
-## is connected to.
+ser = serial.Serial("/dev/ttyACM0", 9600, timeout=2)
+											# serial connection to
+											# Arduino at ttyACM0 with
+											# 9600 baud. Timeout is
+											# needed for ser.readline()
 
-ser = serial.Serial("/dev/ttyACM0", 9600)
-
-## loop until the arduino tells us it is ready
 while not connected:
+	# checks if Arduino is connected and ready
     serin = ser.read()
     connected = True
+  
+text_file = open("log.txt", 'a+')			# opens log.txt in append
+											# and read mode. Creates a
+											# new file in the current
+											# directory, if it doesnt
+											# exist yet
 
-## open text file to store the current 
-##gps co-ordinates received from the rover    
-text_file = open("position4.txt", 'w')
-## read serial data from arduino and 
-## write it to the text file 'position.txt'
 while 1:
     if ser.inWaiting():
-        x=ser.read()
-        print(x) 
-        text_file.write(x)
+        x = ser.readline()					# reads one line
+        t = dt.datetime.now().strftime('%a, %d.%m.%Y; %H:%M:%S')
+											# reads current time
+        print x
+        print t
+        text_file.write(t + ": " + x)
         if x=="\n":
              text_file.seek(0)
              text_file.truncate()
         text_file.flush()
 
-## close the serial connection and text file
-text_file.close()
-ser.close()
+text_file.close()							# closes file and
+ser.close()									# serial connection

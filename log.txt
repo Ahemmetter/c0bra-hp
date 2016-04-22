@@ -1,0 +1,7 @@
+Fri, 22.04.2016; 12:13:42: 2 C and rH = 27.9 %
+Fri, 22.04.2016; 12:13:42: DHT22 A: OK, at T = 23.2 C and rH = 27.9 %
+Fri, 22.04.2016; 12:13:42: DHT22 A: OK, at T = 23.2 C and rH = 27.9 %
+Fri, 22.04.2016; 12:13:44: DHT22 A: OK, at T = 23.2 C and rH = 27.9 %
+Fri, 22.04.2016; 12:13:46: DHT22 A: OK, at T = 23.2 C and rH = 27.9 %
+Fri, 22.04.2016; 12:13:48: DHT22 A: OK, at T = 23.2 C and rH = 27.9 %
+Fri, 22.04.2016; 12:13:50: DHT22 A: OK, at T = 23.2 C and rH = 27.9 %
