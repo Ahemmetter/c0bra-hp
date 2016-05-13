@@ -1,26 +1,47 @@
+/*  Prints values of DHT22 and BMP280 sensors to Serial output.
+ *  Logging is done with ThingSpeak.com, connected via Ethernet port.
+ *  
+ *  Measures humidity, temperature (twice) and air pressure.
+ *  Setup is done with SPI interface, 10k pullups are placed on SCK, SDO and CS lines.
+ *  
+ *  
+ *  LED patterns:
+ *  --------------------------------------------------------
+ *  YELLOW on             : power, Serial connection
+ *  GREEN blinks 2x       : 2 measurements (#1 DHT, #2 BMP)
+ *  GREEN blink, then RED : BMP sensor not returning values
+ *  RED blink, then GREEN : DHT not returning values
+ *  RED on                : either sensor not connected
+ *  RED blinks 3x         : reboot
+ *  
+ *  Watchdog counts till 8 seconds and reboots Arduino board, unless it has been
+ *  reset. This catches infinite loops and general problems.
+ *  
+ *  ThingSpeak allows updates only every 15 seconds, so watchdog needs to be restarted
+ *  several times during each loop (delay is split up).
+ *  
+ *  Issues: CS seems not to work and doesnt initialize BMP sensor.
+ *  
+ *  Pullups seem to be not necessary in either case. LEDs are connected to a
+ *  390 Ohm resistor each.
+ *  
+ *  Tested with Arduino Uno SMD R3 board and Arduino IDE 1.6.8 running on Ubuntu 14.04
+ *  Tested with Arduino Ethernet board   and Arduino IDE 1.6.8 running on Ubuntu 16.04
+ *  
+ *  Last edit: May 13, 2016
+ *  
+ *  Andreas Hemmetter, andreas.hemmetter@gmail.com
+ *  https://github.com/Ahemmetter/c0bra-hp
+ *  https://thingspeak.com/channels/115634
+ */
 
 #include "ThingSpeak.h"
-
 #include <SPI.h>
 #include <DHT.h>
 #include <Ethernet.h>
 byte mac[] = { 0x90, 0xA2, 0xDA, 0x00, 0xE5, 0xBF};
 IPAddress ip(10,42,0,69);
 EthernetClient client;
-
-/*
-  *****************************************************************************************
-  **** Visit https://www.thingspeak.com to sign up for a free account and create
-  **** a channel.  The video tutorial http://community.thingspeak.com/tutorials/thingspeak-channels/ 
-  **** has more information. You need to change this to your channel, and your write API key
-  **** IF YOU SHARE YOUR CODE WITH OTHERS, MAKE SURE YOU REMOVE YOUR WRITE API KEY!!
-  *****************************************************************************************/
-
-
-
-
-
-
 
 
 // --- Libraries --- //
@@ -30,7 +51,7 @@ EthernetClient client;
 
 // --- Constants --- //
 // DHT22
-#define DHTPIN 6
+#define DHTPIN 7
 
 // BMP280 (SPI)
 #define BMP_SCK 13                  // Serial clock pin for BMP (10k pullup to +5V)
@@ -39,9 +60,9 @@ EthernetClient client;
 #define BMP_CS 10                    // CS, has 10k pullup
 
 // LEDs
-#define RED 2                       // pin for LEDs
+#define RED 5                       // pin for LEDs
 #define YELLOW 3
-#define GREEN 5
+#define GREEN 2
 
 
 
@@ -65,8 +86,9 @@ Adafruit_BMP280 bmp(BMP_CS, BMP_MOSI, BMP_MISO, BMP_SCK);
 void setup() {
   wdt_disable();                    // disables watchdog for initial communication
   
-  pinMode(10, OUTPUT);
-  digitalWrite(10, HIGH);
+  
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
   
   pinMode(YELLOW, OUTPUT);          // LED pins set as output
   pinMode(RED, OUTPUT);
@@ -74,22 +96,30 @@ void setup() {
   Serial.begin(9600);               // begin serial connection with 9600 baud
   delay(500);                       // delay to get connection and sensors ready
   wdt_enable(WDTO_8S);              // start watchdog timeout (4 sec might be too short)
-
+  bmp.begin();
   blink(RED, 3);
-  Serial.println(bmp.begin());
-
   dht.begin();                      // starts DHT sensor
+  Serial.println(bmp.begin());
+  
   chk = dht.read(DHTPIN);           // reads DHT status
-  if ((!bmp.begin()) || (chk != 1) ) {
+  Serial.println(chk);
+  
+  if ((!bmp.begin()) || (chk != 1)) {
     // checks DHT and BMP status and shows red LED, in case one of them
     // wasnt found. Loops and resets timeout each time.
     wdt_reset();
+    bmp.begin();
     Serial.println("Could not find a valid sensor, check wiring!");
     digitalWrite(RED, HIGH);
     delay(300);
     digitalWrite(RED, LOW);
     delay(1000);
+    Serial.println(bmp.begin());
+    
+    bmp.begin();
     chk = dht.read(DHTPIN);
+    Serial.println(chk);
+    delay(1000);
   }
   Ethernet.begin(mac, ip);
   ThingSpeak.begin(client);
