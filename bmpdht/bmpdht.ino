@@ -1,7 +1,7 @@
-/*  Prints values of DHT22 and BMP280 sensors to Serial output.
- *  Can be used with Python script serial_ttyamc0.py to log data in txt file.
+   /*  Prints values of two DHT22 and one BMP280 sensors to Serial output
+ *  and redirects values to data.sparkfun.com for public logging.
  *  Measures humidity, temperature (twice) and air pressure.
- *  Setup is done with SPI interface, 10k pullups are placed on SCK, SDO and CS lines.
+ *  Setup is done with I2C interface, 10k pullups are placed on SCK and SDI lines.
  *  
  *  LED patterns:
  *  --------------------------------------------------------
@@ -19,146 +19,172 @@
  *  390 Ohm resistor each.
  *  
  *  Tested with Arduino Uno SMD R3 board and Arduino IDE 1.6.8 running on Ubuntu 14.04
+ *  Testing with Leonardo Eth and Arduino IDE 1.6.9 running on Mac OS X 10.11 (Ethernet
+ *  connection not working)
  *  
- *  Last edit: April 29, 2016
+ *  Last edit: June 07, 2016
  *  
  *  Andreas Hemmetter, andreas.hemmetter@gmail.com
  *  https://github.com/Ahemmetter/c0bra-hp
  */
 
 // --- Libraries --- //
-#include <DHT.h>                    // DHT library for DHT22
-#include <avr/wdt.h>                // Watchdog, interrupts and reboots     
-#include <Adafruit_BMP280.h>        // BMP library for BMP280
+#include <DHT.h>                      // DHT library for DHT22
+#include <avr/wdt.h>                  // Watchdog, interrupts and reboots     
+#include <Adafruit_BMP280.h>          // BMP library
+#include <Adafruit_Sensor.h>          // dependent library
+#include <Wire.h>                     // dependent library
+#include <SPI.h>                      // library for SPI connections
+#include <Ethernet.h>                 // Ethernet library
 
 // --- Constants --- //
 // DHT22
-#define DHTPIN 5                    // pin for DHT data
-
-// BMP280 (SPI)
-#define BMP_SCK 13                  // Serial clock pin for BMP (10k pullup to +5V)
-#define BMP_MISO 12                 // SDO, has 10k pullup
-#define BMP_MOSI 11                 // SDI, no pullup
-#define BMP_CS 10                   // CS, has 10k pullup
+#define DHTPIN_1 12                   // pins for DHT data
+#define DHTPIN_2 11
 
 // LEDs
-#define RED 2                       // pin for LEDs
-#define YELLOW 3
-#define GREEN 4
+#define RED 5                         // pins for LEDs
+#define YELLOW 6
+#define GREEN 7
+
+// SparkFun
+byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x58, 0x88};
+IPAddress server(54,86,132,254);      // numeric IP for data.sparkfun.com
+IPAddress ip(141,76,111,111);
+EthernetClient client;
 
 // --- Variables --- //
-float bmp_temp;                     // values from sensors
-float bmp_press;
-float dht_temp;
-float dht_hum;
-int chk;                            // DHT status (0 or 1)
-int k;                              // counter variable
+int chk;                              // DHT status (0 or 1)
+char COLOR;
+int number;
+const String publicKey = "AJaDoa9gW1SoK2D6E6QR";
+const String privateKey = "rzmXDmlW90TEaVoy8yA1";
+const byte NUM_FIELDS = 6;
+const String fieldNames[NUM_FIELDS] = {"dht1_t" "dht1_h", "dht2_t", "dht2_h", "bmp_t", "bmp_p"};
+String fieldData[NUM_FIELDS];
 
 // --- Initialization --- //
-DHT dht(DHTPIN, DHT22);             // initializes sensors
-Adafruit_BMP280 bmp(BMP_CS, BMP_MOSI, BMP_MISO,  BMP_SCK);
+DHT dht1(DHTPIN_1, DHT22);            // initializes sensors
+DHT dht2(DHTPIN_2, DHT22);
+Adafruit_BMP280 bmp;
 
 // --- Setup --- //
 void setup() {
-  wdt_disable();                    // disables watchdog for initial communication
-  pinMode(YELLOW, OUTPUT);          // LED pins set as output
-  pinMode(RED, OUTPUT);
-  digitalWrite(YELLOW, HIGH);       // starts yellow LED
-  Serial.begin(9600);               // begin serial connection with 9600 baud
-  delay(500);                       // delay to get connection and sensors ready
-  wdt_enable(WDTO_8S);              // start watchdog timeout (4 sec might be too short)
-
-  for (k = 1; k <= 3; k = k + 1) {
-    // blinks 3x to show that Arduino rebooted
-    digitalWrite(RED, HIGH);
-    delay(100);
-    digitalWrite(RED, LOW);
-    delay(100);
-  }
-
-  dht.begin();                      // starts DHT sensor
-  chk = dht.read(DHTPIN);           // reads DHT status
-  
-  while ((!bmp.begin()) || (chk != 1) ) {
-    // checks DHT and BMP status and shows red LED, in case one of them
-    // wasnt found. Loops and resets timeout each time.
-    wdt_reset();
-    Serial.println("Could not find a valid sensor, check wiring!");
-    digitalWrite(RED, HIGH);
-    delay(300);
-    digitalWrite(RED, LOW);
-    delay(1000);
-    chk = dht.read(DHTPIN);
-  }
+  wdt_disable();                      // disables watchdog for initial communication
+  pinMode(YELLOW, OUTPUT);            // LED pins set as output
+  digitalWrite(YELLOW, HIGH);         // starts yellow LED
+  Serial.begin(9600);                 // begin serial connection with 9600 baud
+  delay(500);                         // delay to get connection and sensors ready
+  wdt_enable(WDTO_8S);                // start watchdog timeout (4 sec might be too short)
+  blink(RED, 3);                      // blinks 3 times to show board restarted
+  bmp.begin();                        // starts BMP sensor
+  dht1.begin();                       // starts DHT sensors
+  dht2.begin();
+  chk = Ethernet.begin(mac);          // starts Ethernet connection
+  Serial.println(chk);                // prints Ethernet status, 0: failed, 1: ok
 }
 
 // --- Loop --- //
 void loop() {
-  wdt_reset();                      // resets watchdog
-  pinMode(GREEN, OUTPUT);           // gets green LED ready
-  digitalWrite(GREEN, LOW);
-  delay(1600);                      // delay for sensors to be read. In total, at least 2 sec!
-  
-  chk = dht.read(DHTPIN);           // checks if connection to DHT sensor is ok (0: no connection, 1: ok)
-  if (chk == 1) {
-    dht_temp = dht.readTemperature();
-    dht_hum = dht.readHumidity();   // reads DHT sensor
-    digitalWrite(GREEN, HIGH);      // blinks once for successful DHT sensor values
-    Serial.print("DHT22: ");        // prints values (hum and temp)
-    Serial.print("hum = ");
-    Serial.print(dht_hum);
-    Serial.print(" %, temp = ");
-    Serial.print(dht_temp);
-    Serial.println(" C");
-    delay(150);
-    digitalWrite(GREEN, LOW);
-    delay(100);
-  }
-  else {
-    // if no connection, blink red instead and print "nan"
-    // (keeps formatting ok)
-    digitalWrite(RED, HIGH);
-    Serial.print("DHT22: ");
-    Serial.print("hum = ");
-    Serial.print(dht_hum);
-    Serial.print(" %, temp = ");
-    Serial.print(dht_temp);
-    Serial.println(" C");
-    delay(150);
-    digitalWrite(RED, LOW);
-    delay(100);
-  }
+  wdt_reset();                        // resets watchdog
+  delay(1800);                        // delay for sensors to be read. In total at least 2 sec!
+  readdht();                          // reads DHT values
+  readbmp();                          // reads BMP values
+  postData();                         // posts data to data.sparkfun.com
+}
 
-  bmp_temp = bmp.readTemperature(); // reads BMP sensor
-  bmp_press = bmp.readPressure();
-  
-  if (bmp_press >= 0.0) {
-    // if sensor isnt attached, it shows 0.0 or negative pressure.
-    // This is used as check criterion
-    digitalWrite(GREEN, HIGH);      // blinks green for good BMP values
-    Serial.print("BMP280: ");       // prints values
-    Serial.print("p = ");
-    Serial.print(bmp_press);
-    Serial.print(" Pa, temp = ");
-    Serial.print(bmp_temp);
-    Serial.println(" C");
-    Serial.println();
+void blink(char COLOR, int number) {
+  int k;                              // counter variable
+  for (k = 1; k <= number; k = k + 1) {
+    digitalWrite(COLOR, HIGH);
     delay(150);
-    digitalWrite(GREEN, LOW);
-  }
-  else {
-    // if pressure is 0.0 or negative, blink red
-    // and print 0.0 to keep formatting
-    digitalWrite(RED, HIGH);
-    Serial.print("BMP280: ");
-    Serial.print("p = ");
-    Serial.print(0.0);
-    Serial.print(" Pa, temp = ");
-    Serial.print(0.0);
-    Serial.println(" C");
-    Serial.println();
+    digitalWrite(COLOR, LOW);
     delay(150);
-    digitalWrite(RED, LOW);
   }
 }
 
+void readbmp() {
+  fieldData[4] = bmp.readTemperature(); // reads BMP sensor
+  fieldData[5] = bmp.readPressure();
+  Serial.print("BMP280: ");           // prints values
+  Serial.print("p = ");
+  Serial.print(fieldData[5]);         // writes value to array element
+  Serial.print(" Pa, temp = ");
+  Serial.print(fieldData[4]);
+  Serial.println(" C");
+  Serial.println();
+  blink(GREEN, 1);                    // LED check
+}
+
+void readdht() {
+  fieldData[0] = dht1.readTemperature();
+  fieldData[1] = dht1.readHumidity();   // reads DHT sensor
+  fieldData[2] = dht2.readTemperature();
+  fieldData[3] = dht2.readHumidity();   // reads DHT sensor
+  Serial.print("DHT22_2: ");          // prints values (hum and temp)
+  Serial.print("hum = ");
+  Serial.print(fieldData[1]);         // writes values to array elements
+  Serial.print(" %, temp = ");
+  Serial.print(fieldData[0]);
+  Serial.println(" C");
+  Serial.print("DHT22_2: ");          // prints values (hum and temp)
+  Serial.print("hum = ");
+  Serial.print(fieldData[3]);
+  Serial.print(" %, temp = ");
+  Serial.print(fieldData[2]);
+  Serial.println(" C");
+  blink(GREEN, 1);
+  delay(100);
+}
+
+void postData()
+{
+  // Make a TCP connection to remote host
+  client.connect(server, 80);         // starts client connection to server
+  delay(1000);
+  if (client.connect(server, 80))
+  {
+    // Post the data! Request should look a little something like:
+    // GET /input/publicKey?private_key=privateKey&light=1024&switch=0&name=Jim HTTP/1.1\n
+    // Host: data.sparkfun.com\n
+    // Connection: close\n
+    // \n
+    client.print("GET /input/");      // writes HTML request
+    client.print(publicKey);
+    client.print("?private_key=");
+    client.print(privateKey);
+    
+    for (int i=0; i<NUM_FIELDS; i++)  // writes values
+    {
+      client.print("&");
+      client.print(fieldNames[i]);
+      client.print("=");
+      client.print(fieldData[i]);
+    }
+    
+    client.println(" HTTP/1.1");
+    client.print("Host: ");
+    client.println(server);
+    client.println("Connection: close");
+    client.println();
+  }
+  else
+  {
+    Serial.println("Connection failed");
+  } 
+
+  // Check for a response from the server, and route it
+  // out the serial port.
+  
+  while (client.connected())
+  {
+    if ( client.available() )
+    {
+      char c = client.read();
+      Serial.print(c);
+    }      
+  }
+  
+  Serial.println();
+  client.stop();
+}
