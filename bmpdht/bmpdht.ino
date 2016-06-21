@@ -1,4 +1,4 @@
-   /*  Prints values of two DHT22 and one BMP280 sensors to Serial output
+ /*  Prints values of two DHT22 and one BMP280 sensors to Serial output
  *  and redirects values to data.sparkfun.com for public logging.
  *  Measures humidity, temperature (twice) and air pressure.
  *  Setup is done with I2C interface, 10k pullups are placed on SCK and SDI lines.
@@ -43,14 +43,14 @@
 #define DHTPIN_2 11
 
 // LEDs
-#define RED 5                         // pins for LEDs
-#define YELLOW 6
-#define GREEN 7
+#define RED 10                         // pins for LEDs
+#define YELLOW 9
+#define GREEN 8
 
 // SparkFun
 byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x58, 0x88};
 IPAddress server(54,86,132,254);      // numeric IP for data.sparkfun.com
-IPAddress ip(141,76,111,111);
+//IPAddress ip(10,100,60,100);
 EthernetClient client;
 
 // --- Variables --- //
@@ -73,6 +73,10 @@ void setup() {
   wdt_disable();                      // disables watchdog for initial communication
   pinMode(YELLOW, OUTPUT);            // LED pins set as output
   digitalWrite(YELLOW, HIGH);         // starts yellow LED
+  pinMode(RED, OUTPUT);            // LED pins set as output
+  digitalWrite(RED, LOW);         // starts yellow LED
+  pinMode(GREEN, OUTPUT);            // LED pins set as output
+  digitalWrite(GREEN, LOW);         // starts yellow LED
   Serial.begin(9600);                 // begin serial connection with 9600 baud
   delay(500);                         // delay to get connection and sensors ready
   wdt_enable(WDTO_8S);                // start watchdog timeout (4 sec might be too short)
@@ -80,8 +84,7 @@ void setup() {
   bmp.begin();                        // starts BMP sensor
   dht1.begin();                       // starts DHT sensors
   dht2.begin();
-  chk = Ethernet.begin(mac);          // starts Ethernet connection
-  Serial.println(chk);                // prints Ethernet status, 0: failed, 1: ok
+  Ethernet.begin(mac);          // starts Ethernet connection
 }
 
 // --- Loop --- //
@@ -90,7 +93,9 @@ void loop() {
   delay(1800);                        // delay for sensors to be read. In total at least 2 sec!
   readdht();                          // reads DHT values
   readbmp();                          // reads BMP values
+  //Serial.println("done with reading");
   postData();                         // posts data to data.sparkfun.com
+  //Serial.println("done with writing");
 }
 
 void blink(char COLOR, int number) {
@@ -112,7 +117,6 @@ void readbmp() {
   Serial.print(" Pa, temp = ");
   Serial.print(fieldData[4]);
   Serial.println(" C");
-  Serial.println();
   blink(GREEN, 1);                    // LED check
 }
 
@@ -121,7 +125,7 @@ void readdht() {
   fieldData[1] = dht1.readHumidity();   // reads DHT sensor
   fieldData[2] = dht2.readTemperature();
   fieldData[3] = dht2.readHumidity();   // reads DHT sensor
-  Serial.print("DHT22_2: ");          // prints values (hum and temp)
+  Serial.print("DHT22_1: ");          // prints values (hum and temp)
   Serial.print("hum = ");
   Serial.print(fieldData[1]);         // writes values to array elements
   Serial.print(" %, temp = ");
@@ -139,6 +143,7 @@ void readdht() {
 
 void postData()
 {
+  //Serial.println("ok im here");
   // Make a TCP connection to remote host
   client.connect(server, 80);         // starts client connection to server
   delay(1000);
@@ -170,7 +175,7 @@ void postData()
   }
   else
   {
-    Serial.println("Connection failed");
+    //Serial.println("Connection failed");
   } 
 
   // Check for a response from the server, and route it
@@ -181,7 +186,7 @@ void postData()
     if ( client.available() )
     {
       char c = client.read();
-      Serial.print(c);
+      //Serial.print(c);
     }      
   }
   
