@@ -66,7 +66,7 @@ int chk;                              // DHT status (0 or 1)
 char COLOR;
 int number;
 const String publicKey = "AJaDoa9gW1SoK2D6E6QR";
-const String privateKey = "rzmXDmlW90TEaVoy8yA1";
+const String privateKey = "***"; // left out for privacy reasons
 const byte NUM_FIELDS = 6;
 const String fieldNames[NUM_FIELDS] = {"dht1_t" "dht1_h", "dht2_t", "dht2_h", "bmp_t", "bmp_p"};
 String fieldData[NUM_FIELDS];
